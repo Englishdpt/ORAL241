@@ -1,7 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 
-export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-export const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// Defaults point at the project; the publishable key is public by design (safe in the browser).
+export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://xgzdgizwjdlgnmrurekp.supabase.co";
+export const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "sb_publishable_JTpb1B5gAMyyEtyn8IVYHg_8nrE9EdA";
 
 // True only when the build received both variables. When false the app shows a
 // clear setup message (see main.jsx) instead of crashing into a blank page.

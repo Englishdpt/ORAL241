@@ -14,7 +14,8 @@ const json = (b: unknown, s = 200) =>
 const URL_ = Deno.env.get("SUPABASE_URL")!;
 const admin = createClient(URL_, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false, autoRefreshToken: false } });
 const anon = createClient(URL_, Deno.env.get("SUPABASE_ANON_KEY")!, { auth: { persistSession: false, autoRefreshToken: false } });
-const PEPPER = Deno.env.get("STUDENT_PEPPER")!;
+const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const PEPPER = Deno.env.get("STUDENT_PEPPER") || `mikolongo-pepper:${SERVICE_KEY}`;
 const DOMAIN = Deno.env.get("STUDENT_EMAIL_DOMAIN") ?? "students.realrecorder.app"; // never mailed
 const MAX_FAILS = 5;
 const WINDOW_MIN = 15;
