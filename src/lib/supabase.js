@@ -26,3 +26,16 @@ export async function callStudentAuth(body, accessToken = ANON_KEY) {
   if (!res.ok) throw new Error(json.error || "Erreur réseau");
   return json;
 }
+
+// Calls any Edge Function with the signed-in user's token.
+export async function callFunction(name, body, accessToken) {
+  if (!configured) throw new Error("Application non configurée.");
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: ANON_KEY, Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(body),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || "Erreur réseau");
+  return json;
+}

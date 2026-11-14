@@ -21,6 +21,7 @@ export default function Teacher() {
   const [sel, setSel] = useState(null);
   const [detail, setDetail] = useState(null);
   const [msg, setMsg] = useState("");
+  const [flash, setFlash] = useState("");
   const timer = useRef();
 
   const loadClasses = useCallback(async () => {
@@ -80,6 +81,13 @@ export default function Teacher() {
     setMsg(error ? "Erreur : " + error.message : `✅ ${n} crédit(s) ajouté(s).`);
     loadBoard();
   }
+  // One-click "+1 credit" straight from the ranking table, after a WhatsApp payment.
+  async function quickGrant(r) {
+    if (!confirm(`Ajouter 1 crédit à ${r.display_name} ?`)) return;
+    const { error } = await supabase.rpc("grant_credits", { p_student: r.student_id, p_amount: 1, p_note: "WhatsApp" });
+    setFlash(error ? "Erreur : " + error.message : `✅ 1 crédit ajouté à ${r.display_name}.`);
+    loadBoard();
+  }
   async function resetCode() {
     const code = prompt(`Nouveau code pour ${sel.display_name} (4 à 12 caractères) :`);
     if (!code) return;
@@ -104,9 +112,11 @@ export default function Teacher() {
         <button>+ Créer</button>
       </form>
 
+      {flash && <p className="card small">{flash}</p>}
+      <p className="muted small">Élève qui a payé : cliquez sur « +1 » dans la colonne Crédits. Pour un autre montant, cliquez sur son nom puis « Ajouter des crédits ».</p>
       <div className="card scroll">
         <table>
-          <thead><tr><th>#</th><th>Élève</th><th>Phrases validées</th><th>Score moy.</th><th>Quiz</th><th>Assiduité (14 j)</th><th>Dernière activité</th><th>⭐</th></tr></thead>
+          <thead><tr><th>#</th><th>Élève</th><th>Phrases validées</th><th>Score moy.</th><th>Quiz</th><th>Assiduité (14 j)</th><th>Dernière activité</th><th>⭐ Crédits</th></tr></thead>
           <tbody>
             {rows.map((r, i) => { const [label, cls2] = steady(r); return (
               <tr key={r.student_id} className={sel?.student_id === r.student_id ? "sel" : ""} onClick={() => open(r)}>
@@ -114,7 +124,7 @@ export default function Teacher() {
                 <td>{r.avg_score != null ? Math.round(r.avg_score * 100) + "%" : "–"}</td>
                 <td>{r.exercise_avg != null ? Math.round(r.exercise_avg * 100) + "%" : "–"}</td>
                 <td><span className={`badge ${cls2}`}>{label}</span> {r.active_days_14} j</td>
-                <td>{ago(r.last_active)}</td><td>{credits[r.student_id] ?? 0}</td>
+                <td>{ago(r.last_active)}</td><td>{credits[r.student_id] ?? 0} <button style={{ padding: "3px 10px", marginLeft: 6 }} title="Ajouter 1 crédit" onClick={(e) => { e.stopPropagation(); quickGrant(r); }}>+1</button></td>
               </tr>); })}
             {rows.length === 0 && <tr><td colSpan="8" className="muted">Aucun élève. Donnez le code de classe à vos élèves.</td></tr>}
           </tbody>

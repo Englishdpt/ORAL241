@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth.jsx";
+import { readPhoto } from "../lib/ocr.js";
 
 const WA = import.meta.env.VITE_WHATSAPP_NUMBER;
 
@@ -22,17 +23,16 @@ export default function Premium() {
   const waLink = `https://wa.me/${WA}?text=${encodeURIComponent(
     `Bonjour, je souhaite acheter des crédits MIKOLONGO. Élève : ${profile.first_name} ${profile.last_name}`)}`;
 
-  // Free, in-browser OCR (Tesseract.js). The credit is only spent when the text is saved.
+  // Free, in-browser OCR (see lib/ocr.js). The credit is only spent when the text is saved.
   async function onPhoto(e) {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
-    setErr(""); setBusy("Lecture de la photo… (peut prendre un moment)");
+    setErr(""); setBusy("Préparation de la photo…");
     try {
-      const { createWorker } = await import("tesseract.js");
-      const worker = await createWorker("eng");
-      const { data } = await worker.recognize(file);
-      await worker.terminate();
-      setBody(data.text.replace(/-\n/g, "").replace(/\n(?!\n)/g, " ").trim());
+      const text = await readPhoto(file, (pct) => setBusy(`Lecture du texte… ${pct}%`));
+      if (text.length < 20) setErr("Peu de texte détecté. Reprenez la photo plus près, bien à plat et bien éclairée.");
+      setBody(text);
     } catch { setErr("Lecture impossible. Prenez une photo plus nette, bien éclairée."); }
     setBusy("");
   }
@@ -50,7 +50,7 @@ export default function Premium() {
     <>
       <h2>⭐ Premium</h2>
       <div className="card">
-        <p><strong>{profile.credits}</strong> crédit(s). 1 crédit = 1 texte importé, avec écoute et répétition.</p>
+        <p><strong>{profile.credits}</strong> crédit(s). 1 crédit = 1 texte importé, avec analyse automatique, vocabulaire, grammaire, quiz, écoute et répétition.</p>
         <a className="btn" href={waLink} target="_blank" rel="noreferrer">💬 Acheter des crédits par WhatsApp</a>
         <p className="muted small">Après paiement, votre professeur ajoute vos crédits.</p>
       </div>
@@ -58,6 +58,7 @@ export default function Premium() {
       <div className="card">
         <h3>Importer un texte</h3>
         <label className="btn ghost">📷 Photo ou image<input type="file" accept="image/*" capture="environment" hidden onChange={onPhoto} /></label>
+        <p className="muted small">Conseil : photographiez la page bien à plat, de face, en pleine lumière, sans ombre, en cadrant seulement le texte anglais.</p>
         {busy && <p className="muted">{busy}</p>}
         <label>Titre<input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex: Unit 3 – Climate change" /></label>
         <label>Texte (corrigez les erreurs de lecture avant d'enregistrer)
