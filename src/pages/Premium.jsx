@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth.jsx";
-import { readPhoto } from "../lib/ocr.js";
+import { readPhoto, readPhotoAI } from "../lib/ocr.js";
 
 const WA = import.meta.env.VITE_WHATSAPP_NUMBER;
 
 export default function Premium() {
-  const { profile, refreshProfile } = useAuth();
+  const { profile, refreshProfile, session } = useAuth();
   const nav = useNavigate();
   const [ledger, setLedger] = useState([]);
   const [title, setTitle] = useState("");
@@ -23,17 +23,22 @@ export default function Premium() {
   const waLink = `https://wa.me/${WA}?text=${encodeURIComponent(
     `Bonjour, je souhaite acheter des crédits MIKOLONGO. Élève : ${profile.first_name} ${profile.last_name}`)}`;
 
-  // Free, in-browser OCR (see lib/ocr.js). The credit is only spent when the text is saved.
+  // Photo -> text. First choice: AI vision on the server. If it is unavailable, fall back to in-browser OCR.
+  // The credit is only spent when the text is saved.
   async function onPhoto(e) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    setErr(""); setBusy("Préparation de la photo…");
-    try {
-      const text = await readPhoto(file, (pct) => setBusy(`Lecture du texte… ${pct}%`));
-      if (text.length < 20) setErr("Peu de texte détecté. Reprenez la photo plus près, bien à plat et bien éclairée.");
-      setBody(text);
-    } catch { setErr("Lecture impossible. Prenez une photo plus nette, bien éclairée."); }
+    setErr(""); setBusy("Lecture du texte par l'IA… (10 à 30 secondes)");
+    let text = "";
+    try { text = await readPhotoAI(file, session.access_token); }
+    catch (aiErr) {
+      if (/Crédit/i.test(aiErr.message)) { setErr("Crédit insuffisant. Achetez des crédits via WhatsApp."); setBusy(""); return; }
+      try { text = await readPhoto(file, (pct) => setBusy(`Lecture simplifiée… ${pct}%`)); }
+      catch { setErr("Lecture impossible. Prenez une photo plus nette, bien éclairée."); setBusy(""); return; }
+    }
+    if (text.length < 20) setErr("Peu de texte détecté. Reprenez la photo plus près, bien à plat et bien éclairée.");
+    setBody(text);
     setBusy("");
   }
 

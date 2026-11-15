@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth.jsx";
+import SpeedPicker from "./SpeedPicker.jsx";
 import { segment, speak, listen, compare, speechSupported, PASS } from "../lib/speech";
 
 const ERRORS = { "no-speech": "Aucun son détecté. Parlez plus fort.", "not-allowed": "Autorisez le microphone dans le navigateur.", "audio-capture": "Microphone introuvable." };
@@ -61,6 +62,7 @@ export default function Practice({ textId, mode, content }) {
       {!speechSupported && <p className="warn">La reconnaissance vocale n'est pas disponible sur ce navigateur. Utilisez Chrome ou Edge.</p>}
       <div className="progress"><div style={{ width: `${pct}%` }} /></div>
       <p className="muted small">Phrase {i + 1}/{segs.length} · {done.size} validée(s) · {pct}%</p>
+      <SpeedPicker sample={target} />
       <p className="sentence">{target}</p>
       <div className="row">
         <button className="ghost" onClick={() => go(-1)} disabled={i === 0}>◀</button>

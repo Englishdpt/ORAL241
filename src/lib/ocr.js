@@ -122,3 +122,19 @@ export async function readPhoto(file, onProgress = () => {}) {
     return clean(b.confidence > a.confidence ? b : a);
   } finally { await worker.terminate(); }
 }
+
+// Preferred path: a vision model reads the photo on the server (far more accurate than in-browser OCR).
+// The picture is straightened and shrunk first so the upload stays small.
+export async function readPhotoAI(file, accessToken) {
+  const bitmap = await loadBitmap(file);
+  const scale = Math.min(1, 1800 / Math.max(bitmap.width, bitmap.height));
+  const c = document.createElement("canvas");
+  c.width = Math.round(bitmap.width * scale); c.height = Math.round(bitmap.height * scale);
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+  ctx.drawImage(bitmap, 0, 0, c.width, c.height);
+  const image = c.toDataURL("image/jpeg", 0.85).split(",")[1];
+  const { callFunction } = await import("./supabase.js");
+  const { text } = await callFunction("read-photo", { image, mime: "image/jpeg" }, accessToken);
+  return String(text || "").trim();
+}

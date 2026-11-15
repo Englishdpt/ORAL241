@@ -53,7 +53,27 @@ export function compare(spoken, target) {
   return { score: m ? matched / m : 0, words: t.map((x, k) => ({ w: x.w, ok: ok[k] })) };
 }
 
-export function speak(text, { rate = 0.85, onend } = {}) {
+// Reading speed chosen by the student (kept on the device, shared by every read-aloud in the app).
+export const SPEEDS = [
+  { id: "slow", label: "🐢 Lente", rate: 0.6 },
+  { id: "normal", label: "Normale", rate: 0.85 },
+  { id: "fast", label: "🐇 Rapide", rate: 1.1 },
+];
+const KEY = "mikolongo_speed";
+const listeners = new Set();
+let current = "normal";
+try { const v = localStorage.getItem(KEY); if (SPEEDS.some((x) => x.id === v)) current = v; } catch { /* storage unavailable */ }
+export const getSpeed = () => current;
+export const subscribeSpeed = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
+export function setSpeed(id) {
+  if (!SPEEDS.some((x) => x.id === id)) return;
+  current = id;
+  try { localStorage.setItem(KEY, id); } catch { /* storage unavailable */ }
+  listeners.forEach((fn) => fn());
+}
+const currentRate = () => SPEEDS.find((x) => x.id === current).rate;
+
+export function speak(text, { rate = currentRate(), onend } = {}) {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) { onend?.(); return; }
   window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
