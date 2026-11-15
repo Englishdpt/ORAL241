@@ -17,7 +17,7 @@ export default function App() {
   return (
     <>
       <header className="top">
-        <strong>🎤 MIKOLONGO</strong>
+        <strong>🎤 Oral241</strong>
         <nav>
           <NavLink to="/">Textes</NavLink>
           {!isTeacher && <NavLink to="/premium">⭐ Premium</NavLink>}

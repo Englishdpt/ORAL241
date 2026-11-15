@@ -25,7 +25,7 @@ class ErrorBoundary extends React.Component {
 function NotConfigured() {
   return (
     <div className="login">
-      <h1>🎤 ORAL241</h1>
+      <h1>🎤 Oral241</h1>
       <div className="card">
         <h3>Configuration manquante</h3>
         <p className="small">

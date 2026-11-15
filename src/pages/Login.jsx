@@ -24,7 +24,7 @@ export default function Login() {
 
   return (
     <div className="login">
-      <h1>MIKOLONGO Voice Trainer</h1>
+      <h1>🎤 Oral241</h1>
       <p className="muted">Suivez vos progrès en lecture</p>
       <form className="card" onSubmit={submit}>
         {mode !== "teacher" ? (

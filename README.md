@@ -1,4 +1,4 @@
-# 🎤 RealRecorder: MIKOLONGO Voice Trainer (Supabase + Netlify edition)
+# 🎤 Oral241 (Supabase + Vercel edition)
 
 Open-source rebuild of the Base44 app. English reading and pronunciation trainer for Terminale students in Gabon.
 

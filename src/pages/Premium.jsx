@@ -21,7 +21,7 @@ export default function Premium() {
   }, [profile.id, profile.credits]);
 
   const waLink = `https://wa.me/${WA}?text=${encodeURIComponent(
-    `Bonjour, je souhaite acheter des crédits MIKOLONGO. Élève : ${profile.first_name} ${profile.last_name}`)}`;
+    `Bonjour, je souhaite acheter des crédits Oral241. Élève : ${profile.first_name} ${profile.last_name}`)}`;
 
   // Photo -> text. First choice: AI vision on the server. If it is unavailable, fall back to in-browser OCR.
   // The credit is only spent when the text is saved.
