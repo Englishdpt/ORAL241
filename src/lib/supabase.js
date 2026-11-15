@@ -1,8 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 
 // Defaults point at the project; the publishable key is public by design (safe in the browser).
-export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://xgzdgizwjdlgnmrurekp.supabase.co";
-export const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "sb_publishable_JTpb1B5gAMyyEtyn8IVYHg_8nrE9EdA";
+export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://sqcaxvcksummtgqosdee.supabase.co";
+export const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "sb_publishable_jwP0aFwiOmDxXqAtB_yquw_ATbVgq4g";
 
 // True only when the build received both variables. When false the app shows a
 // clear setup message (see main.jsx) instead of crashing into a blank page.
@@ -23,7 +23,7 @@ export async function callStudentAuth(body, accessToken = ANON_KEY) {
     body: JSON.stringify(body),
   });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json.error || "Erreur réseau");
+  if (!res.ok) throw new Error(json.error || `Le serveur a mis trop de temps ou a échoué (code ${res.status}). Réessayez.`);
   return json;
 }
 
@@ -36,6 +36,6 @@ export async function callFunction(name, body, accessToken) {
     body: JSON.stringify(body),
   });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json.error || "Erreur réseau");
+  if (!res.ok) throw new Error(json.error || `Le serveur a mis trop de temps ou a échoué (code ${res.status}). Réessayez.`);
   return json;
 }

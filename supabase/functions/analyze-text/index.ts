@@ -14,7 +14,14 @@ const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE
   { auth: { persistSession: false, autoRefreshToken: false } });
 const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
 const CLAUDE_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-const GEMINI_MODELS = [Deno.env.get("GEMINI_MODEL"), "gemini-flash-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite"].filter(Boolean) as string[];
+// Models verified against the live logs: 2.5 models are closed to new users; "gemini-flash-latest" was too slow (60 s timeout).
+const GEMINI_MODELS: { model: string; thinking?: Record<string, unknown> }[] = [
+  ...(Deno.env.get("GEMINI_MODEL") ? [{ model: Deno.env.get("GEMINI_MODEL")! }] : []),
+  { model: "gemini-3.8-flash", thinking: { thinkingLevel: "low" } },
+  { model: "gemini-3.8-flash" },
+  { model: "gemini-3.5-flash-lite" },
+  { model: "gemini-3.6-flash", thinking: { thinkingLevel: "low" } },
+];
 const CLAUDE_MODELS = [Deno.env.get("ANALYSIS_MODEL") || "claude-sonnet-5-5", "claude-sonnet-4-6"];
 
 const SYSTEM = `You are an English teacher preparing Terminale students (French-speaking, Gabon) for the oral exam.
@@ -41,25 +48,41 @@ Write every step as plain spoken English in full sentences, in the first person 
 class ModelError extends Error { status = 0; }
 
 async function callGemini(body: string) {
+  const started = Date.now();
   let last: ModelError = new ModelError("no model");
-  for (const model of GEMINI_MODELS) {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-      method: "POST",
-      headers: { "x-goog-api-key": GEMINI_KEY!, "content-type": "application/json" },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM }] },
-        contents: [{ role: "user", parts: [{ text: `<text>\n${body}\n</text>` }] }],
-        generationConfig: { responseMimeType: "application/json", maxOutputTokens: 8192, temperature: 0.4 },
-      }),
-    });
-    if (r.ok) {
-      const j = await r.json();
-      const parts = j.candidates?.[0]?.content?.parts ?? [];
-      return parts.filter((p: any) => typeof p.text === "string" && !p.thought).map((p: any) => p.text).join("");
+  for (const { model, thinking } of GEMINI_MODELS) {
+    const left = 110_000 - (Date.now() - started); // stay under the 150 s platform limit
+    if (left < 15_000) break;
+    const generationConfig: Record<string, unknown> = { responseMimeType: "application/json", maxOutputTokens: 6000, temperature: 0.4 };
+    if (thinking) generationConfig.thinkingConfig = thinking;
+    try {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: "POST",
+        headers: { "x-goog-api-key": GEMINI_KEY!, "content-type": "application/json" },
+        signal: AbortSignal.timeout(Math.min(60_000, left)),
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: SYSTEM }] },
+          contents: [{ role: "user", parts: [{ text: `<text>\n${body}\n</text>` }] }],
+          generationConfig,
+        }),
+      });
+      if (r.ok) {
+        const j = await r.json();
+        const parts = j.candidates?.[0]?.content?.parts ?? [];
+        const text = parts.filter((p: any) => typeof p.text === "string" && !p.thought).map((p: any) => p.text).join("");
+        console.log(`gemini ok ${model} ${Date.now() - started}ms`);
+        if (text.trim()) return text;
+        last = new ModelError(`${model}: empty answer`); last.status = 502;
+        continue;
+      }
+      last = new ModelError(`${model}: ${r.status} ${(await r.text()).slice(0, 200)}`);
+      last.status = r.status;
+      console.log(`gemini fail ${last.message} ${Date.now() - started}ms`);
+      if (r.status === 429 || r.status === 401 || r.status === 403) break; // retrying another model will not help
+    } catch (e) {
+      last = new ModelError(`${model}: ${String(e)}`); last.status = 504;
+      console.log(`gemini timeout/error ${last.message} ${Date.now() - started}ms`);
     }
-    last = new ModelError(`${model}: ${r.status} ${(await r.text()).slice(0, 200)}`);
-    last.status = r.status;
-    if (r.status !== 404 && r.status !== 400) break; // only try the next model name when this one is unknown
   }
   throw last;
 }
@@ -119,7 +142,10 @@ Deno.serve(async (req) => {
   try { raw = await callModel(`Title: ${t.title}\n\n${t.body}`.slice(0, 9000)); }
   catch (e) {
     console.error("model error", String(e));
-    if ((e as ModelError).status === 429) return json({ error: "Beaucoup d'élèves en même temps. Réessayez dans une minute." }, 429);
+    const st = (e as ModelError).status;
+    if (st === 429) return json({ error: "Beaucoup d'élèves en même temps. Réessayez dans une minute." }, 429);
+    if (st === 401 || st === 403) return json({ error: "Clé GEMINI_API_KEY refusée. Vérifiez la clé dans Supabase." }, 502);
+    if (st === 504) return json({ error: "Le service d'analyse est trop lent en ce moment. Réessayez." }, 504);
     return json({ error: "Le service d'analyse est indisponible. Réessayez plus tard." }, 502);
   }
 
