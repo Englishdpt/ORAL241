@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth.jsx";
-import { readPhoto, readPhotoAI } from "../lib/ocr.js";
+import { readFileToText, fitLimit } from "../lib/importers.js";
 
 // Seller WhatsApp number in international format (Gabon +241, no leading 0). Can be overridden with VITE_WHATSAPP_NUMBER.
 const WA = (import.meta.env.VITE_WHATSAPP_NUMBER || "24176291922").replace(/\D/g, "");
@@ -17,6 +17,7 @@ export default function Premium() {
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
   const [qty, setQty] = useState(1);
+  const [note, setNote] = useState("");
 
   useEffect(() => {
     supabase.from("credit_ledger").select("*").eq("student_id", profile.id)
@@ -27,23 +28,29 @@ export default function Premium() {
     `Bonjour, je souhaite acheter ${qty} crédit${qty > 1 ? "s" : ""} Oral241 (${(qty * PRICE).toLocaleString("fr-FR")} F). ` +
     `Nom : ${profile.first_name} ${profile.last_name}. Téléphone : 0${profile.phone || ""}.`)}`;
 
-  // Photo -> text. First choice: AI vision on the server. If it is unavailable, fall back to in-browser OCR.
+  // File(s) -> text: photos, PDFs (text or scanned) and .txt files, in the order chosen.
   // The credit is only spent when the text is saved.
-  async function onPhoto(e) {
-    const file = e.target.files?.[0];
+  async function onFiles(e) {
+    const files = Array.from(e.target.files || []);
     e.target.value = "";
-    if (!file) return;
-    setErr(""); setBusy("Lecture du texte par l'IA… (10 à 30 secondes)");
-    let text = "";
-    try { text = await readPhotoAI(file, session.access_token); }
-    catch (aiErr) {
-      if (/Crédit/i.test(aiErr.message)) { setErr("Crédit insuffisant. Achetez des crédits via WhatsApp."); setBusy(""); return; }
-      try { text = await readPhoto(file, (pct) => setBusy(`Lecture simplifiée… ${pct}%`)); }
-      catch { setErr("Lecture impossible. Prenez une photo plus nette, bien éclairée."); setBusy(""); return; }
+    if (!files.length) return;
+    setErr(""); setNote("");
+    const notes = [], parts = [];
+    try {
+      for (const f of files) {
+        const t = await readFileToText(f, { token: session.access_token, onProgress: setBusy, notes });
+        if (t) parts.push(t.trim());
+      }
+    } catch (x) {
+      setBusy("");
+      setErr(/Crédit/i.test(x.message) ? "Crédit insuffisant. Achetez des crédits via WhatsApp." : x.message);
+      return;
     }
-    if (text.length < 20) setErr("Peu de texte détecté. Reprenez la photo plus près, bien à plat et bien éclairée.");
-    setBody(text);
-    setBusy("");
+    const { text, cut } = fitLimit(parts.join("\n\n"));
+    if (cut) notes.push("Le texte était trop long : il a été raccourci à environ 8 000 caractères.");
+    if (!title && files[0]) setTitle(files[0].name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").slice(0, 80));
+    if (text.length < 20) setErr("Peu de texte détecté. Essayez une photo plus nette, ou un autre fichier.");
+    setBody(text); setNote(notes.join(" ")); setBusy("");
   }
 
   async function save() {
@@ -55,36 +62,64 @@ export default function Premium() {
     nav(`/text/${data}`);
   }
 
+  const credits = profile.credits;
+  const total = (qty * PRICE).toLocaleString("fr-FR");
+  const canSave = !busy && body.trim().length >= 20 && credits >= 1;
+
   return (
     <>
-      <h2>⭐ Premium</h2>
+      <h2>Importer un texte</h2>
+
       <div className="card">
-        <p><strong>{profile.credits}</strong> crédit(s). 1 crédit = 1 texte importé, avec analyse automatique, vocabulaire, grammaire, quiz, écoute et répétition.</p>
-        <p className="small"><strong>1 crédit = {PRICE} F.</strong> Combien en voulez-vous ?</p>
-        <div className="row">
-          {[1, 2, 3, 5, 10].map((n) => <button key={n} className={qty === n ? "" : "ghost"} onClick={() => setQty(n)}>{n}</button>)}
-        </div>
-        <p className="small" style={{ textAlign: "center" }}>Total : <strong>{(qty * PRICE).toLocaleString("fr-FR")} F</strong></p>
-        <a className="btn" href={waLink} target="_blank" rel="noreferrer">💬 Commander sur WhatsApp</a>
-        <p className="muted small">Après votre paiement, vos crédits sont ajoutés à votre compte.</p>
+        <p><span className="pill">⭐ {credits} crédit{credits > 1 ? "s" : ""}</span> <span className="muted small">1 texte = 1 crédit</span></p>
+        <details className="fold" open={credits < 1}>
+          <summary>Acheter des crédits · {PRICE} F l'unité</summary>
+          <p className="small">Combien de crédits ?</p>
+          <div className="chips">
+            {[1, 2, 3, 5, 10].map((n) => <button key={n} className={qty === n ? "" : "ghost"} aria-pressed={qty === n} onClick={() => setQty(n)}>{n}</button>)}
+          </div>
+          <a className="btn big" href={waLink} target="_blank" rel="noreferrer">💬 Commander · {total} F</a>
+          <p className="hint">Vos crédits sont ajoutés après vérification du paiement.</p>
+        </details>
       </div>
 
       <div className="card">
-        <h3>Importer un texte</h3>
-        <label className="btn ghost">📷 Photo ou image<input type="file" accept="image/*" capture="environment" hidden onChange={onPhoto} /></label>
-        <p className="muted small">Conseil : photographiez la page bien à plat, de face, en pleine lumière, sans ombre, en cadrant seulement le texte anglais.</p>
-        {busy && <p className="muted">{busy}</p>}
-        <label>Titre<input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex: Unit 3 – Climate change" /></label>
-        <label>Texte (corrigez les erreurs de lecture avant d'enregistrer)
-          <textarea rows={8} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Collez ou photographiez votre texte anglais…" />
-        </label>
-        {err && <p className="err">{err}</p>}
-        <button onClick={save} disabled={!!busy || body.trim().length < 20}>Utiliser 1 crédit et enregistrer</button>
+        <section className="step">
+          <h3><span className="num">1</span>Choisissez un fichier</h3>
+          <div className="row actions">
+            <label className="btn">📎 Fichier<input type="file" accept="image/*,application/pdf,.pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,.txt" multiple hidden onChange={onFiles} /></label>
+            <label className="btn ghost">📷 Photo<input type="file" accept="image/*" capture="environment" hidden onChange={onFiles} /></label>
+          </div>
+          <p className="hint">Photo, PDF ou Word. Plusieurs fichiers possibles. Page bien à plat et bien éclairée.</p>
+          {busy && <p className="busy" role="status"><span className="spinner" />{busy}</p>}
+        </section>
+
+        <section className="step">
+          <h3><span className="num">2</span>Vérifiez le texte</h3>
+          <label>Titre<input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex : Unit 3 – Climate change" /></label>
+          <label>Texte
+            <textarea rows={8} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Le texte apparaît ici. Vous pouvez aussi le coller ou le taper." />
+          </label>
+          {body && <p className="hint">{body.length.toLocaleString("fr-FR")} / 8 000 caractères · corrigez les fautes de lecture.</p>}
+          {note && <p className="warn">{note}</p>}
+          {err && <p className="err" role="alert">{err}</p>}
+        </section>
+
+        <section className="step">
+          <h3><span className="num">3</span>Enregistrez</h3>
+          <button onClick={save} disabled={!canSave} style={{ width: "100%" }}>
+            {credits < 1 ? "1 crédit nécessaire" : "Enregistrer · 1 crédit"}
+          </button>
+          <p className="hint">{credits < 1 ? "Achetez un crédit ci-dessus pour continuer." : "L'analyse, le vocabulaire et les quiz sont créés automatiquement."}</p>
+        </section>
       </div>
 
-      {ledger.length > 0 && <div className="card"><h4>Historique</h4>
-        {ledger.map((l) => <p key={l.id} className="small">{new Date(l.created_at).toLocaleDateString("fr-FR")} · {l.delta > 0 ? "+" : ""}{l.delta} · {l.reason === "upload_text" ? "Texte importé" : "Crédit ajouté"}</p>)}
-      </div>}
+      {ledger.length > 0 && (
+        <details className="card fold">
+          <summary>Historique</summary>
+          {ledger.map((l) => <p key={l.id} className="small">{new Date(l.created_at).toLocaleDateString("fr-FR")} · {l.delta > 0 ? "+" : ""}{l.delta} · {l.reason === "upload_text" ? "Texte importé" : "Crédit ajouté"}</p>)}
+        </details>
+      )}
     </>
   );
 }

@@ -19,10 +19,10 @@ export default function App() {
       <header className="top">
         <strong>🎤 Oral241</strong>
         <nav>
-          <NavLink to="/">Textes</NavLink>
-          {!isTeacher && <NavLink to="/premium">⭐ Premium</NavLink>}
-          {isTeacher && <NavLink to="/teacher">Enseignant</NavLink>}
-          <button className="link" onClick={signOut}>Sortir</button>
+          <NavLink to="/" end>📚 Textes</NavLink>
+          {!isTeacher && <NavLink to="/premium">➕ Importer</NavLink>}
+          {isTeacher && <NavLink to="/teacher">👩‍🏫 Élèves</NavLink>}
+          <button className="link" onClick={signOut}>Quitter</button>
         </nav>
       </header>
       <main>

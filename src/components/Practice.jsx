@@ -61,16 +61,19 @@ export default function Practice({ textId, mode, content }) {
     <div className="card">
       {!speechSupported && <p className="warn">La reconnaissance vocale n'est pas disponible sur ce navigateur. Utilisez Chrome ou Edge.</p>}
       <div className="progress"><div style={{ width: `${pct}%` }} /></div>
-      <p className="muted small">Phrase {i + 1}/{segs.length} · {done.size} validée(s) · {pct}%</p>
-      <SpeedPicker sample={target} />
+      <p className="muted small">{done.size} phrase{done.size > 1 ? "s" : ""} validée{done.size > 1 ? "s" : ""} sur {segs.length} · {pct} %</p>
+      <p className="how">🔊 Écoutez la phrase, puis 🎤 répétez-la à voix haute. Validée à partir de {Math.round(PASS * 100)} %.</p>
       <p className="sentence">{target}</p>
-      <div className="row">
-        <button className="ghost" onClick={() => go(-1)} disabled={i === 0}>◀</button>
+      <div className="row actions">
         <button onClick={hear} disabled={state !== "idle"}>🔊 Écouter</button>
         <button className={state === "listening" ? "rec" : "accent"} onClick={say} disabled={state === "speaking" || !speechSupported}>
           {state === "listening" ? "🎤 Parlez…" : "🎤 Répéter"}
         </button>
-        <button className="ghost" onClick={() => go(1)} disabled={i === segs.length - 1}>▶</button>
+      </div>
+      <div className="row">
+        <button className="ghost" onClick={() => go(-1)} disabled={i === 0} aria-label="Phrase précédente">◀</button>
+        <span className="muted small">Phrase {i + 1}/{segs.length}</span>
+        <button className="ghost" onClick={() => go(1)} disabled={i === segs.length - 1} aria-label="Phrase suivante">▶</button>
       </div>
       {res?.error && <p className="err">{res.error}</p>}
       {res?.words && (
@@ -81,6 +84,8 @@ export default function Practice({ textId, mode, content }) {
           {res.score >= PASS && i === segs.length - 1 && done.size === segs.length && <p>🏆 Texte terminé !</p>}
         </div>
       )}
+      <p className="muted small" style={{ textAlign: "center", marginTop: 12 }}>Vitesse de lecture</p>
+      <SpeedPicker sample={target} />
     </div>
   );
 }

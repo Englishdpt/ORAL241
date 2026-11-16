@@ -6,7 +6,7 @@ import Practice from "../components/Practice.jsx";
 import Quiz from "../components/Quiz.jsx";
 import { METHOD } from "../lib/method";
 
-const TABS = [["text", "📖 Texte"], ["analysis", "🧠 Analyse"], ["vocab", "🔤 Vocabulaire"], ["grammar", "✏️ Grammaire"]];
+const TABS = [["text", "📖 Texte"], ["analysis", "🧠 Analyse"], ["vocab", "🔤 Mots"], ["grammar", "✏️ Grammaire"]];
 
 export default function Study() {
   const { id } = useParams();
@@ -42,20 +42,20 @@ export default function Study() {
   const analysisText = useMemo(
     () => (text?.analysis || []).map((s) => `${s.title.replace(/^\d+\.\s*/, "")}. ${s.content}`).join(" "), [text]);
 
-  if (text === null) return <p className="muted">Chargement…</p>;
-  if (text === false) return <p>Texte introuvable. <Link to="/">Retour</Link></p>;
+  if (text === null) return <p className="muted center">Chargement…</p>;
+  if (text === false) return <p className="center">Texte introuvable. <Link to="/">Retour</Link></p>;
   const quiz = (kind) => exos.filter((e) => e.kind === kind);
 
   return (
     <>
-      <Link to="/" className="link">← Retour</Link>
+      <Link to="/" className="link">← Mes textes</Link>
       <h2>{text.title}</h2>
       <div className="tabs">{TABS.map(([k, l]) => <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{l}</button>)}</div>
 
       {tab === "text" && <Practice key="text" textId={id} mode="text" content={text.body} />}
 
       {tab === "analysis" && <details className="card method">
-        <summary>📋 Méthode d'analyse en 5 étapes</summary>
+        <summary>📋 La méthode en 5 étapes</summary>
         {METHOD.map((m) => <div key={m.title}><h4>{m.title}</h4><ul>{m.items.map((it, k) => <li key={k}>{it}</li>)}</ul></div>)}
       </details>}
 
@@ -63,26 +63,26 @@ export default function Study() {
         ? (text.owner_id
             ? <div className="card">
                 {gen === "busy"
-                  ? <p>⏳ Analyse automatique en cours… (environ 30 secondes). Vous pouvez lire le texte en attendant.</p>
+                  ? <p className="busy"><span className="spinner" />Analyse en cours… environ 30 secondes. Lisez le texte en attendant.</p>
                   : <><p className="muted">{gen || "L'analyse n'est pas encore prête."}</p><button onClick={generate}>🔄 Générer l'analyse</button></>}
               </div>
             : <p className="muted">Pas d'analyse pour ce texte.</p>)
         : <>
             {text.analysis.map((s, i) => <div className="card" key={i}><h4>{s.title}</h4><p>{s.content}</p></div>)}
-            <h3>Répéter l'analyse</h3>
+            <h3>Répétez l'analyse</h3>
             <Practice key="analysis" textId={id} mode="analysis" content={analysisText} />
           </>)}
 
       {tab === "vocab" && <>
         {text.vocabulary.map((v, i) => <div className="card" key={i}><strong>{v.word}</strong> — {v.meaning}<br /><em className="muted">{v.example}</em></div>)}
         {quiz("vocab").map((e) => <Quiz key={e.id} textId={id} kind="vocab" title={e.title} items={e.items} />)}
-        {!text.vocabulary.length && !quiz("vocab").length && <p className="muted">{gen === "busy" ? "⏳ Génération en cours…" : "Pas de vocabulaire pour ce texte."}</p>}
+        {!text.vocabulary.length && !quiz("vocab").length && <p className="muted">{gen === "busy" ? "Génération en cours…" : "Pas de vocabulaire pour ce texte."}</p>}
       </>}
 
       {tab === "grammar" && <>
         {text.grammar_tips.map((g, i) => <div className="card" key={i}><h4>💡 {g.title}</h4><p>{g.content}</p></div>)}
         {quiz("grammar").map((e) => <Quiz key={e.id} textId={id} kind="grammar" title={e.title} items={e.items} />)}
-        {!text.grammar_tips.length && !quiz("grammar").length && <p className="muted">{gen === "busy" ? "⏳ Génération en cours…" : "Pas de grammaire pour ce texte."}</p>}
+        {!text.grammar_tips.length && !quiz("grammar").length && <p className="muted">{gen === "busy" ? "Génération en cours…" : "Pas de grammaire pour ce texte."}</p>}
       </>}
     </>
   );
