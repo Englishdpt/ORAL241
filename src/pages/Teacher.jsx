@@ -22,17 +22,22 @@ export default function Teacher() {
   const [detail, setDetail] = useState(null);
   const [msg, setMsg] = useState("");
   const [flash, setFlash] = useState("");
+  const [q, setQ] = useState("");
   const timer = useRef();
 
   const loadClasses = useCallback(async () => {
     const { data } = await supabase.from("classes").select("*").order("created_at");
     setClasses(data || []);
-    setCid((c) => c || data?.[0]?.id || "");
   }, []);
   useEffect(() => { loadClasses(); }, [loadClasses]);
 
   const loadBoard = useCallback(async () => {
-    if (!cid) return;
+    if (!cid) { // all students, every school
+      const { data } = await supabase.rpc("all_students_board");
+      setRows(data || []);
+      setCredits(Object.fromEntries((data || []).map((p) => [p.student_id, p.credits])));
+      return;
+    }
     const [{ data: lb }, { data: pr }] = await Promise.all([
       supabase.rpc("class_leaderboard", { p_class: cid }),
       supabase.from("profiles").select("id, credits").eq("class_id", cid),
@@ -102,6 +107,7 @@ export default function Teacher() {
       <div className="row">
         <Link className="btn ghost" to="/teacher/texts">📚 Gérer les textes</Link>
         <select value={cid} onChange={(e) => { setCid(e.target.value); setSel(null); }}>
+          <option value="">Tous les élèves</option>
           {classes.map((c) => <option key={c.id} value={c.id}>{c.name} · {c.series}</option>)}
         </select>
         {cls && <span className="tag">Code classe : <strong>{cls.join_code}</strong></span>}
@@ -112,21 +118,22 @@ export default function Teacher() {
         <button>+ Créer</button>
       </form>
 
+      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="🔎 Chercher un élève (nom ou numéro)" style={{ marginTop: 8 }} />
       {flash && <p className="card small">{flash}</p>}
       <p className="muted small">Élève qui a payé : cliquez sur « +1 » dans la colonne Crédits. Pour un autre montant, cliquez sur son nom puis « Ajouter des crédits ».</p>
       <div className="card scroll">
         <table>
-          <thead><tr><th>#</th><th>Élève</th><th>Phrases validées</th><th>Score moy.</th><th>Quiz</th><th>Assiduité (14 j)</th><th>Dernière activité</th><th>⭐ Crédits</th></tr></thead>
+          <thead><tr><th>#</th><th>Élève</th><th>Téléphone</th><th>Phrases validées</th><th>Score moy.</th><th>Quiz</th><th>Assiduité (14 j)</th><th>Dernière activité</th><th>⭐ Crédits</th></tr></thead>
           <tbody>
-            {rows.map((r, i) => { const [label, cls2] = steady(r); return (
+            {rows.filter((r) => !q.trim() || `${r.display_name} ${r.phone || ""}`.toLowerCase().includes(q.trim().toLowerCase())).map((r, i) => { const [label, cls2] = steady(r); return (
               <tr key={r.student_id} className={sel?.student_id === r.student_id ? "sel" : ""} onClick={() => open(r)}>
-                <td>{i + 1}</td><td>{r.display_name}</td><td>{r.passed_segments}</td>
+                <td>{i + 1}</td><td>{r.display_name}</td><td>{r.phone ? "0" + r.phone : "–"}</td><td>{r.passed_segments}</td>
                 <td>{r.avg_score != null ? Math.round(r.avg_score * 100) + "%" : "–"}</td>
                 <td>{r.exercise_avg != null ? Math.round(r.exercise_avg * 100) + "%" : "–"}</td>
                 <td><span className={`badge ${cls2}`}>{label}</span> {r.active_days_14} j</td>
                 <td>{ago(r.last_active)}</td><td>{credits[r.student_id] ?? 0} <button style={{ padding: "3px 10px", marginLeft: 6 }} title="Ajouter 1 crédit" onClick={(e) => { e.stopPropagation(); quickGrant(r); }}>+1</button></td>
               </tr>); })}
-            {rows.length === 0 && <tr><td colSpan="8" className="muted">Aucun élève. Donnez le code de classe à vos élèves.</td></tr>}
+            {rows.length === 0 && <tr><td colSpan="9" className="muted">Aucun élève inscrit pour l'instant.</td></tr>}
           </tbody>
         </table>
       </div>

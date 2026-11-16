@@ -1,7 +1,7 @@
-// Student sign-up / login WITHOUT email, plus teacher reset of a forgotten code.
+// Student sign-up / login with PHONE NUMBER + personal code (no class code, open to every school), plus teacher reset of a forgotten code.
 // Each student gets a hidden synthetic auth user, so Row Level Security (auth.uid()) works as usual.
 // The student's code is never stored as-is: password = HMAC-SHA256(secret pepper, email:code).
-// Secrets: STUDENT_PEPPER (required), STUDENT_EMAIL_DOMAIN (optional).
+// Secrets: STUDENT_PEPPER (optional; defaults to a key derived from the project's service role key), STUDENT_EMAIL_DOMAIN (optional).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const cors = {
@@ -12,16 +12,22 @@ const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...cors, "Content-Type": "application/json" } });
 
 const URL_ = Deno.env.get("SUPABASE_URL")!;
-const admin = createClient(URL_, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false, autoRefreshToken: false } });
+const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const admin = createClient(URL_, SERVICE, { auth: { persistSession: false, autoRefreshToken: false } });
 const anon = createClient(URL_, Deno.env.get("SUPABASE_ANON_KEY")!, { auth: { persistSession: false, autoRefreshToken: false } });
-const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const PEPPER = Deno.env.get("STUDENT_PEPPER") || `mikolongo-pepper:${SERVICE_KEY}`;
+const PEPPER = Deno.env.get("STUDENT_PEPPER") || `mikolongo-pepper:${SERVICE}`;
 const DOMAIN = Deno.env.get("STUDENT_EMAIL_DOMAIN") ?? "students.realrecorder.app"; // never mailed
 const MAX_FAILS = 5;
 const WINDOW_MIN = 15;
 
-const slug = (s: string) =>
-  s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+// 076291922, 76291922, +241 76 29 19 22 and 00241 76291922 all become 76291922.
+function normPhone(raw: string) {
+  let d = raw.replace(/\D/g, "");
+  if (d.startsWith("00")) d = d.slice(2);
+  if (d.startsWith("241") && d.length > 9) d = d.slice(3);
+  if (d.startsWith("0")) d = d.slice(1);
+  return d;
+}
 
 async function derive(email: string, code: string) {
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(PEPPER),
@@ -37,11 +43,7 @@ async function resetCode(req: Request, b: any) {
   const { data: u } = await admin.auth.getUser(token);
   if (!u?.user) return json({ error: "Non autorisé." }, 401);
   const { data: me } = await admin.from("profiles").select("role").eq("id", u.user.id).maybeSingle();
-  const { data: stu } = await admin.from("profiles").select("class_id").eq("id", b.studentId).maybeSingle();
-  const { data: cls } = stu?.class_id
-    ? await admin.from("classes").select("teacher_id").eq("id", stu.class_id).maybeSingle()
-    : { data: null };
-  if (me?.role !== "teacher" || cls?.teacher_id !== u.user.id) return json({ error: "Non autorisé." }, 403);
+  if (me?.role !== "teacher") return json({ error: "Non autorisé." }, 403);
   const newCode = String(b.newCode ?? "").trim();
   if (!validCode(newCode)) return json({ error: "Le code doit avoir 4 à 12 caractères." }, 400);
   const { data: target } = await admin.auth.admin.getUserById(b.studentId);
@@ -63,25 +65,23 @@ Deno.serve(async (req) => {
   if (b.action === "reset") return resetCode(req, b);
   if (b.action !== "signup" && b.action !== "login") return json({ error: "Action inconnue." }, 400);
 
-  const first = String(b.firstName ?? "").trim();
-  const last = String(b.lastName ?? "").trim();
+  const phone = normPhone(String(b.phone ?? ""));
   const code = String(b.code ?? "").trim();
-  const classCode = String(b.classCode ?? "").trim().toUpperCase();
-  if (first.length < 2 || last.length < 2 || first.length > 40 || last.length > 40)
-    return json({ error: "Prénom et nom requis (2 à 40 caractères)." }, 400);
+  if (phone.length < 7 || phone.length > 10) return json({ error: "Numéro de téléphone invalide (ex : 076291922)." }, 400);
   if (!validCode(code)) return json({ error: "Le code doit avoir 4 à 12 caractères." }, 400);
 
-  const { data: cls } = await admin.from("classes").select("id").eq("join_code", classCode).maybeSingle();
-  if (!cls) return json({ error: "Code de classe inconnu. Demandez-le à votre professeur." }, 404);
-
-  const email = `${slug(first)}.${slug(last)}.${cls.id.slice(0, 8)}@${DOMAIN}`;
+  const email = `p${phone}@${DOMAIN}`;
   const password = await derive(email, code);
 
   if (b.action === "signup") {
+    const first = String(b.firstName ?? "").trim();
+    const last = String(b.lastName ?? "").trim();
+    if (first.length < 2 || last.length < 2 || first.length > 40 || last.length > 40)
+      return json({ error: "Prénom et nom requis (2 à 40 caractères)." }, 400);
     const { data: created, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
-    if (error || !created.user) return json({ error: "Ce nom existe déjà dans cette classe. Utilisez « Déjà inscrit »." }, 409);
+    if (error || !created.user) return json({ error: "Ce numéro est déjà inscrit. Utilisez « Déjà inscrit »." }, 409);
     const { error: pe } = await admin.from("profiles").insert({
-      id: created.user.id, role: "student", first_name: first, last_name: last, class_id: cls.id,
+      id: created.user.id, role: "student", first_name: first, last_name: last, phone,
     });
     if (pe) {
       await admin.auth.admin.deleteUser(created.user.id);
@@ -97,7 +97,7 @@ Deno.serve(async (req) => {
   const { data, error } = await anon.auth.signInWithPassword({ email, password });
   if (error || !data.session) {
     if (b.action === "login") await admin.from("login_attempts").insert({ email });
-    return json({ error: "Nom, code ou code de classe incorrect." }, 401);
+    return json({ error: "Numéro ou code incorrect." }, 401);
   }
   if (b.action === "login") await admin.from("login_attempts").delete().eq("email", email);
   return json({ access_token: data.session.access_token, refresh_token: data.session.refresh_token });

@@ -4,7 +4,9 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth.jsx";
 import { readPhoto, readPhotoAI } from "../lib/ocr.js";
 
-const WA = import.meta.env.VITE_WHATSAPP_NUMBER;
+// Seller WhatsApp number in international format (Gabon +241, no leading 0). Can be overridden with VITE_WHATSAPP_NUMBER.
+const WA = (import.meta.env.VITE_WHATSAPP_NUMBER || "24176291922").replace(/\D/g, "");
+const PRICE = 500; // F CFA per credit
 
 export default function Premium() {
   const { profile, refreshProfile, session } = useAuth();
@@ -14,6 +16,7 @@ export default function Premium() {
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
+  const [qty, setQty] = useState(1);
 
   useEffect(() => {
     supabase.from("credit_ledger").select("*").eq("student_id", profile.id)
@@ -21,7 +24,8 @@ export default function Premium() {
   }, [profile.id, profile.credits]);
 
   const waLink = `https://wa.me/${WA}?text=${encodeURIComponent(
-    `Bonjour, je souhaite acheter des crédits Oral241. Élève : ${profile.first_name} ${profile.last_name}`)}`;
+    `Bonjour, je souhaite acheter ${qty} crédit${qty > 1 ? "s" : ""} Oral241 (${(qty * PRICE).toLocaleString("fr-FR")} F). ` +
+    `Nom : ${profile.first_name} ${profile.last_name}. Téléphone : 0${profile.phone || ""}.`)}`;
 
   // Photo -> text. First choice: AI vision on the server. If it is unavailable, fall back to in-browser OCR.
   // The credit is only spent when the text is saved.
@@ -56,8 +60,13 @@ export default function Premium() {
       <h2>⭐ Premium</h2>
       <div className="card">
         <p><strong>{profile.credits}</strong> crédit(s). 1 crédit = 1 texte importé, avec analyse automatique, vocabulaire, grammaire, quiz, écoute et répétition.</p>
-        <a className="btn" href={waLink} target="_blank" rel="noreferrer">💬 Acheter des crédits par WhatsApp</a>
-        <p className="muted small">Après paiement, votre professeur ajoute vos crédits.</p>
+        <p className="small"><strong>1 crédit = {PRICE} F.</strong> Combien en voulez-vous ?</p>
+        <div className="row">
+          {[1, 2, 3, 5, 10].map((n) => <button key={n} className={qty === n ? "" : "ghost"} onClick={() => setQty(n)}>{n}</button>)}
+        </div>
+        <p className="small" style={{ textAlign: "center" }}>Total : <strong>{(qty * PRICE).toLocaleString("fr-FR")} F</strong></p>
+        <a className="btn" href={waLink} target="_blank" rel="noreferrer">💬 Commander sur WhatsApp</a>
+        <p className="muted small">Après votre paiement, vos crédits sont ajoutés à votre compte.</p>
       </div>
 
       <div className="card">
